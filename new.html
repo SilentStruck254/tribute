@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>HD Lantern Festival</title>
+<style>
+  body {
+    margin: 0;
+    height: 700vh; 
+    background: radial-gradient(circle at 50% 80%, #0a0a0a 0%, #000 100%);
+    overflow-x: hidden;
+    font-family: 'Poppins', sans-serif;
+  }
+  canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1;
+  }
+  /* Letter overlay */
+  #letter-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0,0,0,0.95);
+    color: #fff;
+    z-index: 5;
+    flex-direction: column;
+    text-align: center;
+    opacity: 1;
+    transition: opacity 2s ease;
+  }
+  #letter-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  #letter-overlay p {
+    font-size: 24px;
+    margin: 10px 0;
+  }
+  #letter-overlay button {
+    margin-top: 20px;
+    padding: 14px 30px;
+    font-size: 22px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    background-color: #ff9f5f;
+    color: white;
+  }
+</style>
+</head>
+<body>
+
+<div id="letter-overlay">
+  <p>Dear Friend,</p>
+  <p>Send your lanterns to the sky!</p>
+  <button id="sendBtn">Send</button>
+</div>
+
+<audio id="bgMusic" loop>
+  <source src="https://www.bensound.com/bensound-music/bensound-sunny.mp3" type="audio/mpeg">
+</audio>
+
+<canvas id="canvas"></canvas>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+function resize() {
+  const scale = window.devicePixelRatio || 1;
+  canvas.width = window.innerWidth * scale;
+  canvas.height = window.innerHeight * scale;
+  canvas.style.width = window.innerWidth + 'px';
+  canvas.style.height = window.innerHeight + 'px';
+  ctx.setTransform(scale,0,0,scale,0,0);
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Rounded rectangle helper
+function roundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y);
+  ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);
+  ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r);
+  ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+}
+
+// Lantern class
+class Lantern{
+  constructor(yOverride){
+    this.reset(yOverride);
+    this.pulseSeed = Math.random()*Math.PI*2;
+    this.flameSeed = Math.random()*Math.PI*2;
+  }
+  reset(yOverride){
+    this.depth = Math.random();
+    this.width = 20 + this.depth*25;
+    this.height = 40 + this.depth*50;
+    this.radius = this.width*0.3;
+    this.glowRadius = Math.max(this.width,this.height)*2.5;
+    this.x = Math.random()*canvas.width;
+    this.y = yOverride!==undefined?yOverride:canvas.height+Math.random()*50;
+    this.baseY = this.y;
+    this.alpha=0;
+    this.riseSpeed = 0.05 + this.depth*0.15;
+    this.colorHue = 30 + Math.random()*40;
+    this.baseColor = `hsl(${this.colorHue},100%,${55+this.depth*15}%)`;
+  }
+  update(scrollY){
+    this.baseY -= this.riseSpeed;
+    this.y = this.baseY - scrollY*this.depth*0.15;
+    this.alpha += (1-this.alpha)*0.02;
+  }
+  draw(){
+    const pulse = 0.85 + 0.15*Math.sin(Date.now()*0.002 + this.pulseSeed);
+    ctx.globalAlpha = this.alpha*pulse;
+
+    const glow = ctx.createRadialGradient(this.x+this.width/2,this.y+this.height/2,0,
+                                         this.x+this.width/2,this.y+this.height/2,this.glowRadius);
+    glow.addColorStop(0,this.baseColor);
+    glow.addColorStop(0.7,this.baseColor.replace('hsl','hsla').replace(')',',0.3)'));
+    glow.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle = glow;
+    roundRect(ctx,this.x,this.y,this.width,this.height,this.radius);
+    ctx.fill();
+
+    const flameFlicker = 0.85 + 0.15*Math.sin(Date.now()*0.01 + this.flameSeed);
+    const flameY = this.y + this.height*0.65;
+    const flameX = this.x + this.width/2;
+    const flameRadius = this.width*0.3*flameFlicker;
+    ctx.beginPath();
+    ctx.arc(flameX,flameY,flameRadius,0,Math.PI*2);
+    ctx.fillStyle = `hsl(${this.colorHue},100%,80%)`;
+    ctx.fill();
+
+    ctx.globalAlpha=1;
+  }
+}
+
+// Lantern array
+const lanterns = [];
+const maxLanterns = 180;
+function spawnInitialLanterns(count){
+  for(let i=0;i<count;i++){
+    const yStart = canvas.height/2 + Math.random()*(canvas.height/2);
+    lanterns.push(new Lantern(yStart));
+  }
+}
+spawnInitialLanterns(80);
+
+let allowSpawn = false;
+
+function spawnLantern(){
+  if(allowSpawn && lanterns.length<maxLanterns){
+    lanterns.push(new Lantern());
+  }
+  setTimeout(spawnLantern,350);
+}
+spawnLantern();
+
+// Scroll stop/resume
+window.addEventListener('scroll', ()=>{
+  allowSpawn = window.scrollY<50;
+});
+
+// Stars
+const stars=[];
+for(let i=0;i<400;i++){
+  stars.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,
+              radius:Math.random()*2+0.5,alpha:Math.random(),flicker:Math.random()*0.02+0.005,depth:Math.random()*0.2});
+}
+function drawStars(scrollY){
+  stars.forEach(s=>{
+    const starY = s.y - scrollY*s.depth;
+    s.alpha += (Math.random()-0.5)*s.flicker;
+    s.alpha = Math.min(Math.max(s.alpha,0),1);
+    ctx.globalAlpha = s.alpha;
+    ctx.fillStyle="white";
+    ctx.beginPath();
+    ctx.arc(s.x,starY,s.radius,0,Math.PI*2);
+    ctx.fill();
+  });
+  ctx.globalAlpha=1;
+}
+
+// Animate
+function animate(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const scrollY = window.scrollY;
+  drawStars(scrollY);
+  lanterns.forEach((l,i)=>{
+    l.update(scrollY);
+    l.draw();
+    if(l.y+l.height<0) lanterns.splice(i,1);
+  });
+  requestAnimationFrame(animate);
+}
+animate();
+
+// Letter overlay and background music
+const sendBtn = document.getElementById('sendBtn');
+const letterOverlay = document.getElementById('letter-overlay');
+const bgMusic = document.getElementById('bgMusic');
+
+sendBtn.addEventListener('click', ()=>{
+  letterOverlay.classList.add('hidden');
+  allowSpawn = true;
+  bgMusic.play().catch(()=>{}); // handle autoplay restrictions
+  for(let i=0;i<40;i++) lanterns.push(new Lantern());
+});
+</script>
+
+</body>
+</html>
